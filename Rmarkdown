@@ -1,0 +1,170 @@
+library(lpSolve)
+library(MASS)
+library(sampling)
+library(readxl)
+
+# Importation de données
+BS <- read_excel("C://Users//hanab//Downloads//sondagebienetrebd.xlsx")
+head(BS)
+tab <- data.frame(BS)
+head(tab)
+
+Y <- tab$Pourcentage  # notre variable d'intérêt est le pourcentage du salaire des femmes dédiées à leur bien-être
+mean(Y)
+{r}
+ybarPESR <- NULL
+varPESR <- NULL
+n <- 20
+N <- 100
+for (i in 1:20) {
+  t <- srswor(20, 100)  # échantillonnage à probabilités égales sans remise
+  echPESR <- as.vector(Y[t == 1])
+  ybarPESR[i] <- mean(echPESR)
+  s2y <- sum((echPESR - ybarPESR[i])^2) / (n - 1)
+  varPESR[i] <- (1 - n / N) * s2y * 1 / n
+}
+
+icPESRmin <- c(-1.96 * sqrt(varPESR) + ybarPESR)  # borne inférieure de l'intervalle de confiance
+icPESRmax <- c(1.96 * sqrt(varPESR) + ybarPESR)  # borne supérieure de l'intervalle de confiance
+longIC <- icPESRmax - icPESRmin
+PESR <- data.frame(ybarPESR, varPESR, icPESRmin, icPESRmax, longIC)
+
+library(lattice)
+x <- 1:20
+xyplot(PESR$icPESRmin + PESR$icPESRmax + ybarPESR ~ x, col = c("red", "blue", "green"), type = "o",
+       main = "Sondage aléatoire simple sans remise", xlab = "Les échantillons", ylab = "Intervalles de confiance ybarPESR")
+mean(PESR$ybarPESR)
+{r}
+# SAS PEAR
+ybarPEAR <- NULL
+varPEAR <- NULL
+
+for (i in 1:20) {
+  t <- srswr(20, 100)  # échantillonnage à probabilités égales avec remise
+  echPEAR <- Y[t != 0]  # tirage de l'échantillon
+  m <- length(echPEAR)  # taille de l'échantillon tiré
+  ybarPEAR[i] <- mean(echPEAR)
+  s2y <- sum((echPEAR - ybarPEAR[i])^2) / (m - 1)
+  varPEAR[i] <- s2y / m
+}
+
+icPEARmin <- c(-1.96 * sqrt(varPEAR) + ybarPEAR)  # borne inférieure de l'intervalle de confiance
+icPEARmax <- c(1.96 * sqrt(varPEAR) + ybarPEAR)  # borne supérieure de l'intervalle de confiance
+longIC <- icPEARmax - icPEARmin
+PEAR <- data.frame(ybarPEAR, varPEAR, icPEARmin, icPEARmax, longIC)
+
+library(lattice)
+x <- 1:20
+xyplot(PEAR$icPEARmin + PEAR$icPEARmax + ybarPEAR ~ x, col = c("red", "blue", "green"), type = "o",
+       main = "Sondage aléatoire simple avec remise", xlab = "Les échantillons", ylab = "INTERVALLES DE CONFIANCE")
+mean(PEAR$ybarPEAR)
+Sondage à probabilité inégales
+{r}
+# Avec remise (PIAR)
+var_aux <- (1 / tab$moyensalaire)
+x <- var_aux  # Nous avons choisi le moyen salaire comme variable auxiliaire
+
+######## PIAR #########
+echant <- matrix(0, nrow = 20, ncol = 20)  # l'échantillon tiré
+y <- vector("length" = 20, "numeric")  # la moyenne estimée
+var <- vector("length" = 20, "numeric")  # la variance estimée de la moyenne 
+IC <- matrix(0, nrow = 20, ncol = 2)  # intervalle de confiance
+longueur <- matrix(0, nrow = 20, ncol = 1)  # longueur de l'intervalle de confiance
+
+s <- sum(x)
+p <- 1:100  # pondération selon la variable auxiliaire
+for (i in 1:100) p[i] <- x[i] / s
+v <- 1:101  # la somme des pondérations jusqu'à i
+v[1] <- 0
+for (i in 2:101) v[i] <- sum(p[1:(i - 1)])
+echantp <- matrix(0, nrow = 20, ncol = 20)  # l'échantillon pondéré
+
+for (i in 1:20) {
+  for (j in 1:20) {
+    u <- runif(1, 0, 1)
+    for (k in 1:100) {
+      if ((v[1:100][k] <= u) & (u < v[2:101][k])) {
+        echantp[j, i] <- Y[k] / p[k]
+        echant[j, i] <- Y[k]
+      }
+    }
+  }
+}
+
+y[i] <- (1 / (n * N)) * sum(echantp[, i])
+var[i] <- (1 / (n * (n - 1) * N * N)) * (sum((echantp[, i] - (100 * y[i]))^2))
+for (i in 1:20) {
+  IC[i, ] <- c(y[i] - 1.96 * sqrt(var[i] / 20), y[i] + 1.96 * sqrt(var[i] / 20))
+  longueur[i] <- IC[i, 2] - IC[i, 1]
+}
+IC
+
+e <- 1:20
+plot(e, IC[, 1], ylim = c(min(min(IC[, 2]), min(IC[, 1])), max(max(IC[, 2]), max(IC[, 1]))), type = "o", 
+     xaxt = "n", xlab = "Echantillons ei", ylab = "Intervalle de confiance", 
+     main = list("IC associés aux ei", cex = 1.5, font = 3), col = 2)
+par(new = TRUE)
+plot(e, IC[, 2], ylim = c(min(min(IC[, 2]), min(IC[, 1])), max(max(IC[, 2]), max(IC[, 1]))), type = "o", 
+     xaxt = "n", xlab = "Echantillons ei", ylab = "", 
+     main = list("IC associés aux ei", cex = 1.5, font = 3))
+axis(1, at = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20))
+Y_piar <- y
+mean(Y_piar)
+
+dfpiar <- data.frame(Y_piar, var, IC[i, 1], IC[i, 2], longueur[i])
+dfpiar
+############# PISR ##################
+
+{r}
+############## PISR ###############
+
+ybarPISR <- NULL
+varPISR <- NULL
+icPISRmin <- NULL
+icPISRmax <- NULL
+for (i in 1:20) {
+  pi <- inclusionprobabilities(x, 20)
+  sp <- UPpoisson(pi)  # Méthode de poisson pour l'échantillonnage
+  ech <- getdata(y, sp)
+  pk <- getdata(pi, sp)
+  tybarPISR <- sum(ech[, 2] / pk)
+  ybarPISR[i] <- 1 / 100 * tybarPISR
+  varPISR[i] <- 1 / 10000 * sum((1 - pk[, 2]) * (ech[, 2] / pk[, 2])^2)
+  icPISRmin[i] <- -1.96 * varPISR[i] + ybarPISR[i]  # borne inférieure de l'intervalle de confiance
+  icPISRmax[i] <- 1.96 * sqrt(varPISR[i]) + ybarPISR[i]
+}
+lgIC <- icPISRmax - icPISRmin  # amplitude de l'intervalle de confiance
+PISR <- data.frame(ybarPISR, varPISR, icPISRmin, icPISRmax, lgIC)
+
+# Visualisation
+plot(1:20, PISR$icPISRmin, ylim = range(PISR), type = "o", col = 2, xlab = "Echantillons", 
+     ylab = "Intervalle de confiance", main = "IC associés aux ei")
+points(1:20, PISR$icPISRmax, type = "o", col = "blue")
+axis(1, at = 1:20)
+
+mean(PISR$ybarPISR)
+{r}
+# Estimation de la taille d'échantillon
+tab$age <- as.numeric(tab$age)  # converti en numérique
+N <- nrow(tab)  # taille de l'échantillon total
+mean(tab$age)
+{r}
+# Échantillonnage stratifié
+age <- tab$Age
+Nhs <- table(age)
+M <- length(Nhs)
+N <- sum(Nhs)
+
+echants1 <- matrix(0, nrow = 4, ncol = 20)
+yh_s1 <- NULL
+
+for (i in 1:20) {
+  echants1[, i] <- sample(Nhs[1], 4, replace = FALSE)
+}
+for (i in 1:20) {
+  yh_s1[i] <- mean(Y[echants1[, i]])
+}
+
+# Variance et moyenne
+sh <- (1 / 3) * sapply(1:20, function(i) sum((echants1[, i] - yh_s1[i])^2))
+varianceh <- ((1 / 4) * (1 - (4 / Nhs[1]))) * sh
